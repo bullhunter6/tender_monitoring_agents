@@ -23,7 +23,7 @@ An AI-powered tender monitoring system that automatically scrapes, categorizes, 
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Scheduler     │    │  Email Service   │    │  Web Dashboard  │
-│   (every 3h)    │    │  (notifications) │    │  (coming soon)  │
+│   (every 3h)    │    │  (notifications) │    │                 |
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
