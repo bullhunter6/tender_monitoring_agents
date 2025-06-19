@@ -26,11 +26,11 @@ The system is composed of a Python FastAPI backend, a React frontend, and a mult
 
 ```mermaid
 graph TD
-    subgraph Frontend (React)
+    subgraph Frontend_React [Frontend (React)]
         A[Web Dashboard] -->|API Calls| B(FastAPI Backend)
     end
 
-    subgraph Backend (FastAPI)
+    subgraph Backend_FastAPI [Backend (FastAPI)]
         B --> C{Scheduler}
         B --> D[API Endpoints]
         D --> E[Database (SQLAlchemy)]
