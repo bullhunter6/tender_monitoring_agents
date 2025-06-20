@@ -1,11 +1,12 @@
-// App.tsx - Updated to pass tenders data to Dashboard
+// App.tsx - Updated to include Test Crawler tab
 import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
   FileText, 
   Globe, 
   Tag, 
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  TestTube
 } from 'lucide-react';
 import { useApiData } from './hooks/useApi';
 import { 
@@ -13,7 +14,8 @@ import {
   TenderList, 
   PageManager, 
   KeywordManager, 
-  Settings 
+  Settings,
+  TestCrawler 
 } from './components';
 import { TabType } from './types';
 
@@ -44,6 +46,7 @@ function App() {
     { id: 'tenders', name: 'Tenders', icon: FileText },
     { id: 'pages', name: 'Pages', icon: Globe },
     { id: 'keywords', name: 'Keywords', icon: Tag },
+    { id: 'test-crawler', name: 'Test Crawler', icon: TestTube }, // NEW TAB
     { id: 'settings', name: 'Settings', icon: SettingsIcon },
   ];
 
@@ -54,7 +57,7 @@ function App() {
           <Dashboard 
             stats={stats}
             systemStatus={systemStatus}
-            tenders={tenders} // Pass tenders data for processing stats
+            tenders={tenders}
             onTriggerExtraction={triggerExtraction}
           />
         );
@@ -64,6 +67,8 @@ function App() {
         return <PageManager pages={pages} onRefresh={refreshData} />;
       case 'keywords':
         return <KeywordManager keywords={keywords} onRefresh={refreshData} />;
+      case 'test-crawler': // NEW CASE
+        return <TestCrawler onRefresh={refreshData} />;
       case 'settings':
         return <Settings />;
       default:
@@ -117,6 +122,8 @@ function App() {
               const Icon = item.icon;
               // Add badge for tenders tab to show processed count
               const showBadge = item.id === 'tenders' && tenders.filter(t => t.is_processed).length > 0;
+              // Add special styling for test crawler tab
+              const isTestCrawler = item.id === 'test-crawler';
               
               return (
                 <button
@@ -124,15 +131,22 @@ function App() {
                   onClick={() => setActiveTab(item.id as TabType)}
                   className={`flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-colors relative ${
                     activeTab === item.id
-                      ? 'bg-blue-100 text-blue-700 border-2 border-blue-200'
+                      ? isTestCrawler 
+                        ? 'bg-purple-100 text-purple-700 border-2 border-purple-200'
+                        : 'bg-blue-100 text-blue-700 border-2 border-blue-200'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 border-2 border-transparent'
                   }`}
                 >
-                  <Icon className="h-5 w-5 mr-2" />
+                  <Icon className={`h-5 w-5 mr-2 ${isTestCrawler ? 'text-purple-600' : ''}`} />
                   {item.name}
                   {showBadge && (
                     <span className="ml-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
                       {tenders.filter(t => t.is_processed).length}
+                    </span>
+                  )}
+                  {isTestCrawler && activeTab === item.id && (
+                    <span className="ml-2 bg-purple-500 text-white text-xs px-2 py-0.5 rounded-full">
+                      NEW
                     </span>
                   )}
                 </button>

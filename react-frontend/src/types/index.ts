@@ -1,4 +1,4 @@
-// types/index.ts - Updated with detailed tender information
+// types/index.ts - Updated with Test Crawler tab type
 export interface Tender {
   id: number;
   title: string;
@@ -92,5 +92,6 @@ export interface SystemStatus {
   message: string;
 }
 
-export type TabType = 'dashboard' | 'tenders' | 'pages' | 'keywords' | 'settings';
+// UPDATED: Added 'test-crawler' to TabType
+export type TabType = 'dashboard' | 'tenders' | 'pages' | 'keywords' | 'test-crawler' | 'settings';
 export type CategoryType = 'all' | 'esg' | 'credit_rating';

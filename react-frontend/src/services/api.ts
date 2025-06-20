@@ -1,4 +1,4 @@
-// services/api.ts - Updated with email settings functionality
+// services/api.ts - Complete API service with Test Crawler
 import axios from 'axios';
 import { Tender, Page, Keyword, SystemStatus } from '../types';
 
@@ -7,7 +7,7 @@ const API_BASE_URL = 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000, // Increased timeout for crawler testing
 });
 
 // Add email settings types
@@ -32,13 +32,32 @@ export interface TestEmailRequest {
   category: 'esg' | 'credit_rating';
 }
 
-export const apiRequest = async (endpoint: string, method: 'get' | 'post' = 'get', data?: any, options: any = {}) => {
+// NEW: Test Crawler types
+export interface CrawlTestResult {
+  status: 'success' | 'failed' | 'error';
+  url: string;
+  title?: string;
+  markdown?: string;
+  html?: string;
+  links?: string[];
+  media?: string[];
+  metadata?: any;
+  word_count?: number;
+  char_count?: number;
+  error?: string;
+}
+
+export const apiRequest = async (endpoint: string, method: 'get' | 'post' | 'put' | 'delete' = 'get', data?: any, options: any = {}) => {
   try {
     let response;
     if (method === 'get') {
       response = await api.get(endpoint, options);
     } else if (method === 'post') {
       response = await api.post(endpoint, data, options);
+    } else if (method === 'put') {
+      response = await api.put(endpoint, data, options);
+    } else if (method === 'delete') {
+      response = await api.delete(endpoint, options);
     }
     return response?.data;
   } catch (error) {
@@ -116,13 +135,29 @@ export const apiService = {
     await api.delete(`/api/v1/keywords/${id}`);
   },
 
-  // Email Settings - NEW METHODS
+  // Test Crawler - NEW METHOD
+  testCrawler: async (url: string): Promise<CrawlTestResult> => {
+    try {
+      console.log(`Testing crawler for URL: ${url}`);
+      const data = await apiRequest('/api/v1/system/test-crawler', 'post', { url });
+      console.log('Crawler test result:', data);
+      return data as CrawlTestResult;
+    } catch (error) {
+      console.error('Failed to test crawler:', error);
+      return {
+        status: 'error',
+        url: url,
+        error: 'Failed to test crawler. Please check your connection and try again.'
+      };
+    }
+  },
+
+  // Email Settings
   getEmailSettings: async (): Promise<EmailSettingsResponse> => {
     try {
       const data = await apiRequest('/api/v1/system/email-settings');
       return data as EmailSettingsResponse;
     } catch (error) {
-      // Fallback to default settings if API call fails
       console.warn('Failed to load email settings from API, using defaults:', error);
       return {
         success: true,

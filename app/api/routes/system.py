@@ -14,6 +14,9 @@ from app.services.email_service import EnhancedEmailService
 from app.models import MonitoredPage, Tender, Keyword, CrawlLog
 from app.repositories.email_settings_repository import EmailSettingsRepository
 
+from pydantic import BaseModel, HttpUrl
+from app.services.scraper import TenderScraper
+
 router = APIRouter()
 
 # Add these new models for email settings
@@ -37,6 +40,9 @@ class TestEmailRequest(BaseModel):
 
 class AddEmailRequest(BaseModel):
     email: EmailStr
+
+class TestCrawlerRequest(BaseModel):
+    url: HttpUrl
 
 logger = logging.getLogger(__name__)
 
@@ -307,3 +313,44 @@ async def get_crawl_logs(
         }
         for log in logs
     ]
+
+@router.post("/test-crawler")
+async def test_crawler(request: TestCrawlerRequest):
+    """Test crawl4ai on a given URL to see if it can extract content"""
+    try:
+        url = str(request.url)
+        logger.info(f"Testing crawler on URL: {url}")
+        
+        # Use the existing TenderScraper to test the URL
+        async with TenderScraper() as scraper:
+            result = await scraper.scrape_page(url)
+        
+        if result['status'] == 'success':
+            logger.info(f"Crawler test successful for {url}")
+            return {
+                'status': 'success',
+                'url': url,
+                'title': result.get('title', ''),
+                'markdown': result.get('markdown', ''),
+                'html': result.get('html', ''),
+                'links': result.get('links', []),
+                'media': result.get('media', []),
+                'metadata': result.get('metadata', {}),
+                'word_count': result.get('word_count', 0),
+                'char_count': result.get('char_count', 0)
+            }
+        else:
+            logger.error(f"Crawler test failed for {url}: {result.get('error', 'Unknown error')}")
+            return {
+                'status': 'failed',
+                'url': url,
+                'error': result.get('error', 'Failed to extract content from the page')
+            }
+            
+    except Exception as e:
+        logger.error(f"Error testing crawler for {url}: {e}")
+        return {
+            'status': 'error',
+            'url': str(request.url),
+            'error': f'Server error while testing crawler: {str(e)}'
+        }
