@@ -1,6 +1,6 @@
 """
-Email Settings Repository
-Create this as app/repositories/email_settings_repository.py
+Fixed Email Settings Repository
+app/repositories/email_settings_repository.py
 """
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -132,7 +132,7 @@ class EmailSettingsRepository:
             return []
     
     def add_email_to_category(self, db: Session, category: str, email: str) -> bool:
-        """Add email to specific category"""
+        """Add email to specific category - FIXED VERSION"""
         try:
             setting_key = 'esg_emails' if category == 'esg' else 'credit_emails'
             
@@ -141,24 +141,30 @@ class EmailSettingsRepository:
             ).first()
             
             if setting:
-                emails = setting.setting_value or []
-                if email not in emails:
-                    emails.append(email)
-                    setting.setting_value = emails
+                # Get current emails list
+                current_emails = setting.setting_value or []
+                
+                # Add new email if not already present
+                if email not in current_emails:
+                    current_emails.append(email)
+                    setting.setting_value = current_emails
                     setting.updated_at = datetime.utcnow()
+                    logger.info(f"Adding email {email} to existing {category} category")
                 else:
                     logger.info(f"Email {email} already exists in {category} category")
                     return True  # Still return True since email is in the list
             else:
+                # Create new setting with this email
                 setting = EmailNotificationSettings(
                     setting_key=setting_key,
                     setting_value=[email],
                     description=f'{category.upper()} team email addresses for notifications'
                 )
                 db.add(setting)
+                logger.info(f"Creating new {category} category with email {email}")
             
             db.commit()
-            logger.info(f"Added email {email} to {category} category")
+            logger.info(f"Successfully added email {email} to {category} category")
             return True
             
         except Exception as e:
@@ -167,7 +173,7 @@ class EmailSettingsRepository:
             return False
     
     def remove_email_from_category(self, db: Session, category: str, email: str) -> bool:
-        """Remove email from specific category"""
+        """Remove email from specific category - FIXED VERSION"""
         try:
             setting_key = 'esg_emails' if category == 'esg' else 'credit_emails'
             
@@ -176,15 +182,17 @@ class EmailSettingsRepository:
             ).first()
             
             if setting and setting.setting_value:
-                emails = setting.setting_value
-                if email in emails:
-                    emails.remove(email)
-                    setting.setting_value = emails
+                current_emails = setting.setting_value
+                if email in current_emails:
+                    current_emails.remove(email)
+                    setting.setting_value = current_emails
                     setting.updated_at = datetime.utcnow()
                     db.commit()
                     logger.info(f"Removed email {email} from {category} category")
                 else:
                     logger.info(f"Email {email} not found in {category} category")
+            else:
+                logger.info(f"No settings found for {category} category")
             
             return True
             

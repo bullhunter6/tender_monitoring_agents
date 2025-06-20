@@ -1,4 +1,4 @@
-// components/Settings.tsx - Enhanced with email management functionality
+// components/Settings.tsx - Fixed email management functionality
 import React, { useState, useEffect } from 'react';
 import { 
   Clock, 
@@ -11,7 +11,8 @@ import {
   Plus,
   Trash2,
   Users,
-  Send
+  Send,
+  RefreshCw
 } from 'lucide-react';
 import { apiService } from '../services/api';
 
@@ -46,6 +47,7 @@ export const Settings: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [testingEmail, setTestingEmail] = useState<string | null>(null);
   const [processingEmails, setProcessingEmails] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
   
   useEffect(() => {
     const fetchSystemStatus = async () => {
@@ -74,15 +76,22 @@ export const Settings: React.FC = () => {
     try {
       console.log('Loading email settings from API...');
       
-      // Make actual API call to get email settings with fallback
       const response = await apiService.getEmailSettings();
       console.log('Email settings API response:', response);
       
-      if (response.success) {
+      if (response.success && response.settings) {
         console.log('Setting email settings from API:', response.settings);
-        setEmailSettings(response.settings);
+        setEmailSettings({
+          esg_emails: response.settings.esg_emails || [],
+          credit_rating_emails: response.settings.credit_rating_emails || [],
+          notification_preferences: response.settings.notification_preferences || {
+            send_for_new_tenders: true,
+            send_daily_summary: true,
+            send_urgent_notifications: true,
+          }
+        });
       } else {
-        console.warn('API returned unsuccessful response:', response.message);
+        console.warn('API returned unsuccessful response or missing settings:', response);
         // Use default settings if API returns unsuccessful
         setEmailSettings({
           esg_emails: [],
@@ -106,6 +115,17 @@ export const Settings: React.FC = () => {
           send_urgent_notifications: true,
         }
       });
+    }
+  };
+
+  const refreshEmailSettings = async () => {
+    setRefreshing(true);
+    try {
+      await loadEmailSettings();
+    } catch (error) {
+      console.error('Error refreshing email settings:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -133,25 +153,31 @@ export const Settings: React.FC = () => {
     try {
       console.log('Adding ESG email:', newEsgEmail);
       
-      // Add via API first
-      const response = await apiService.addEmailToCategory('esg', newEsgEmail);
-      console.log('Add email API response:', response);
+      // First, optimistically update the local state
+      const updatedSettings = {
+        ...emailSettings,
+        esg_emails: [...emailSettings.esg_emails, newEsgEmail]
+      };
       
-      if (response.success) {
+      // Save the entire settings object to the backend
+      const saveResponse = await apiService.saveEmailSettings(updatedSettings);
+      console.log('Save email settings response:', saveResponse);
+      
+      if (saveResponse.success) {
         // Update local state only after successful API call
-        setEmailSettings(prev => ({
-          ...prev,
-          esg_emails: [...prev.esg_emails, newEsgEmail]
-        }));
+        setEmailSettings(updatedSettings);
         setNewEsgEmail('');
         setEmailErrors({ ...emailErrors, esg: '' });
-        console.log('ESG email added successfully to state');
+        console.log('ESG email added successfully');
+        
+        // Refresh settings from backend to ensure consistency
+        await loadEmailSettings();
       } else {
-        setEmailErrors({ ...emailErrors, esg: `Failed to add email: ${response.message}` });
+        setEmailErrors({ ...emailErrors, esg: `Failed to add email: ${saveResponse.message}` });
       }
     } catch (error) {
       console.error('Error adding ESG email:', error);
-      setEmailErrors({ ...emailErrors, esg: 'Failed to add email' });
+      setEmailErrors({ ...emailErrors, esg: 'Failed to add email. Please try again.' });
     }
   };
 
@@ -174,25 +200,31 @@ export const Settings: React.FC = () => {
     try {
       console.log('Adding Credit email:', newCreditEmail);
       
-      // Add via API first
-      const response = await apiService.addEmailToCategory('credit_rating', newCreditEmail);
-      console.log('Add credit email API response:', response);
+      // First, optimistically update the local state
+      const updatedSettings = {
+        ...emailSettings,
+        credit_rating_emails: [...emailSettings.credit_rating_emails, newCreditEmail]
+      };
       
-      if (response.success) {
+      // Save the entire settings object to the backend
+      const saveResponse = await apiService.saveEmailSettings(updatedSettings);
+      console.log('Save credit email settings response:', saveResponse);
+      
+      if (saveResponse.success) {
         // Update local state only after successful API call
-        setEmailSettings(prev => ({
-          ...prev,
-          credit_rating_emails: [...prev.credit_rating_emails, newCreditEmail]
-        }));
+        setEmailSettings(updatedSettings);
         setNewCreditEmail('');
         setEmailErrors({ ...emailErrors, credit: '' });
-        console.log('Credit email added successfully to state');
+        console.log('Credit email added successfully');
+        
+        // Refresh settings from backend to ensure consistency
+        await loadEmailSettings();
       } else {
-        setEmailErrors({ ...emailErrors, credit: `Failed to add email: ${response.message}` });
+        setEmailErrors({ ...emailErrors, credit: `Failed to add email: ${saveResponse.message}` });
       }
     } catch (error) {
       console.error('Error adding Credit email:', error);
-      setEmailErrors({ ...emailErrors, credit: 'Failed to add email' });
+      setEmailErrors({ ...emailErrors, credit: 'Failed to add email. Please try again.' });
     }
   };
 
@@ -206,20 +238,26 @@ export const Settings: React.FC = () => {
       console.log('Removing ESG email:', emailToRemove);
       setProcessingEmails(prev => new Set(prev).add(emailToRemove));
       
-      // Remove via API first
-      const response = await apiService.removeEmailFromCategory('esg', emailToRemove);
-      console.log('Remove email API response:', response);
+      // Update local state optimistically
+      const updatedSettings = {
+        ...emailSettings,
+        esg_emails: emailSettings.esg_emails.filter(email => email !== emailToRemove)
+      };
       
-      if (response.success) {
+      // Save the entire settings object to the backend
+      const saveResponse = await apiService.saveEmailSettings(updatedSettings);
+      console.log('Remove ESG email settings response:', saveResponse);
+      
+      if (saveResponse.success) {
         // Update local state only after successful API call
-        setEmailSettings(prev => ({
-          ...prev,
-          esg_emails: prev.esg_emails.filter(email => email !== emailToRemove)
-        }));
-        console.log('ESG email removed successfully from state');
+        setEmailSettings(updatedSettings);
+        console.log('ESG email removed successfully');
+        
+        // Refresh settings from backend to ensure consistency
+        await loadEmailSettings();
       } else {
-        console.error('Failed to remove email via API:', response.message);
-        alert(`Failed to remove email: ${response.message}`);
+        console.error('Failed to remove email via API:', saveResponse.message);
+        alert(`Failed to remove email: ${saveResponse.message}`);
       }
     } catch (error) {
       console.error('Error removing ESG email:', error);
@@ -243,20 +281,26 @@ export const Settings: React.FC = () => {
       console.log('Removing Credit email:', emailToRemove);
       setProcessingEmails(prev => new Set(prev).add(emailToRemove));
       
-      // Remove via API first
-      const response = await apiService.removeEmailFromCategory('credit_rating', emailToRemove);
-      console.log('Remove credit email API response:', response);
+      // Update local state optimistically
+      const updatedSettings = {
+        ...emailSettings,
+        credit_rating_emails: emailSettings.credit_rating_emails.filter(email => email !== emailToRemove)
+      };
       
-      if (response.success) {
+      // Save the entire settings object to the backend
+      const saveResponse = await apiService.saveEmailSettings(updatedSettings);
+      console.log('Remove credit email settings response:', saveResponse);
+      
+      if (saveResponse.success) {
         // Update local state only after successful API call
-        setEmailSettings(prev => ({
-          ...prev,
-          credit_rating_emails: prev.credit_rating_emails.filter(email => email !== emailToRemove)
-        }));
-        console.log('Credit email removed successfully from state');
+        setEmailSettings(updatedSettings);
+        console.log('Credit email removed successfully');
+        
+        // Refresh settings from backend to ensure consistency
+        await loadEmailSettings();
       } else {
-        console.error('Failed to remove email via API:', response.message);
-        alert(`Failed to remove email: ${response.message}`);
+        console.error('Failed to remove email via API:', saveResponse.message);
+        alert(`Failed to remove email: ${saveResponse.message}`);
       }
     } catch (error) {
       console.error('Error removing Credit email:', error);
@@ -287,6 +331,8 @@ export const Settings: React.FC = () => {
       
       if (response.success) {
         alert('Email settings saved successfully!');
+        // Refresh settings to ensure consistency
+        await loadEmailSettings();
       } else {
         alert(`Failed to save email settings: ${response.message}`);
       }
@@ -326,7 +372,7 @@ export const Settings: React.FC = () => {
         </div>
       ) : (
         emails.map((email, index) => (
-          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+          <div key={`${email}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
             <div className="flex items-center">
               <Mail className="h-4 w-4 text-gray-500 mr-2" />
               <span className="text-sm font-medium text-gray-900">{email}</span>
@@ -375,14 +421,14 @@ export const Settings: React.FC = () => {
             Email Notifications Management
           </div>
           <button
-            onClick={loadEmailSettings}
-            disabled={loading}
+            onClick={refreshEmailSettings}
+            disabled={refreshing}
             className="flex items-center px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
           >
-            {loading ? (
+            {refreshing ? (
               <Loader className="h-4 w-4 mr-1 animate-spin" />
             ) : (
-              <CheckCircle className="h-4 w-4 mr-1" />
+              <RefreshCw className="h-4 w-4 mr-1" />
             )}
             Refresh Settings
           </button>
@@ -391,15 +437,15 @@ export const Settings: React.FC = () => {
         <div className="space-y-8">
           {/* Debug Info */}
           <div className="bg-gray-50 p-4 rounded-lg border-2 border-dashed border-gray-300">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Debug Information:</h4>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Current Status:</h4>
             <div className="text-xs text-gray-600 space-y-1">
-              <div>ESG Emails Count: {emailSettings.esg_emails.length}</div>
-              <div>Credit Rating Emails Count: {emailSettings.credit_rating_emails.length}</div>
+              <div>ESG Emails: {emailSettings.esg_emails.length} configured</div>
+              <div>Credit Rating Emails: {emailSettings.credit_rating_emails.length} configured</div>
               <div>Loading: {loading ? 'Yes' : 'No'}</div>
-              <div>Current ESG Emails: {JSON.stringify(emailSettings.esg_emails)}</div>
-              <div>Current Credit Emails: {JSON.stringify(emailSettings.credit_rating_emails)}</div>
+              <div>Last Refresh: {new Date().toLocaleTimeString()}</div>
             </div>
           </div>
+
           {/* ESG Team Emails */}
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -420,6 +466,12 @@ export const Settings: React.FC = () => {
                       setNewEsgEmail(e.target.value);
                       if (emailErrors.esg) setEmailErrors({ ...emailErrors, esg: '' });
                     }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addEsgEmail();
+                      }
+                    }}
                     placeholder="Enter ESG team email address"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
@@ -429,7 +481,8 @@ export const Settings: React.FC = () => {
                 </div>
                 <button
                   onClick={addEsgEmail}
-                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  disabled={!newEsgEmail.trim()}
+                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Add
@@ -461,6 +514,12 @@ export const Settings: React.FC = () => {
                       setNewCreditEmail(e.target.value);
                       if (emailErrors.credit) setEmailErrors({ ...emailErrors, credit: '' });
                     }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addCreditEmail();
+                      }
+                    }}
                     placeholder="Enter Credit Rating team email address"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
@@ -470,7 +529,8 @@ export const Settings: React.FC = () => {
                 </div>
                 <button
                   onClick={addCreditEmail}
-                  className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  disabled={!newCreditEmail.trim()}
+                  className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Add
@@ -553,6 +613,7 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
+      {/* Rest of the Settings components remain unchanged */}
       {/* Recent Activity */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>

@@ -1,6 +1,6 @@
 """
-System API Routes
-System management and monitoring endpoints
+Fixed System API Routes
+app/api/routes/system.py
 """
 from typing import Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +15,30 @@ from app.models import MonitoredPage, Tender, Keyword, CrawlLog
 from app.repositories.email_settings_repository import EmailSettingsRepository
 
 router = APIRouter()
+
+# Add these new models for email settings
+class EmailSettings(BaseModel):
+    esg_emails: List[EmailStr]
+    credit_rating_emails: List[EmailStr]
+    notification_preferences: Dict[str, bool] = {
+        "send_for_new_tenders": True,
+        "send_daily_summary": True,
+        "send_urgent_notifications": True
+    }
+
+class EmailSettingsResponse(BaseModel):
+    success: bool
+    message: str
+    settings: EmailSettings
+
+class TestEmailRequest(BaseModel):
+    email: EmailStr
+    category: str  # 'esg' or 'credit_rating'
+
+class AddEmailRequest(BaseModel):
+    email: EmailStr
+
+logger = logging.getLogger(__name__)
 
 @router.get("/status")
 async def get_system_status(db: Session = Depends(get_db)):
@@ -52,80 +76,14 @@ async def get_system_status(db: Session = Depends(get_db)):
         ]
     }
 
-@router.post("/test-email")
-async def test_email_connection():
-    """Test email configuration"""
-    email_service = EnhancedEmailService()
-    result = await email_service.test_email_connection()
-    
-    if result["status"] == "failed":
-        raise HTTPException(status_code=500, detail=result["message"])
-    
-    return result
-
-@router.get("/logs/crawl")
-async def get_crawl_logs(
-    limit: int = 50,
-    page_id: int = None,
-    db: Session = Depends(get_db)
-):
-    """Get crawl logs"""
-    query = db.query(CrawlLog)
-    
-    if page_id:
-        query = query.filter(CrawlLog.page_id == page_id)
-    
-    logs = query.order_by(CrawlLog.started_at.desc()).limit(limit).all()
-    
-    return [
-        {
-            "id": log.id,
-            "page_id": log.page_id,
-            "page_name": log.page.name if log.page else None,
-            "status": log.status,
-            "tenders_found": log.tenders_found,
-            "tenders_new": log.tenders_new,
-            "started_at": log.started_at.isoformat(),
-            "completed_at": log.completed_at.isoformat() if log.completed_at else None,
-            "duration_seconds": log.duration_seconds,
-            "error_message": log.error_message,
-            "error_type": log.error_type
-        }
-        for log in logs
-    ]
-
-
-# Add these new models for email settings
-class EmailSettings(BaseModel):
-    esg_emails: List[EmailStr]
-    credit_rating_emails: List[EmailStr]
-    notification_preferences: Dict[str, bool] = {
-        "send_for_new_tenders": True,
-        "send_daily_summary": True,
-        "send_urgent_notifications": True
-    }
-
-class EmailSettingsResponse(BaseModel):
-    success: bool
-    message: str
-    settings: EmailSettings
-
-class TestEmailRequest(BaseModel):
-    email: EmailStr
-    category: str  # 'esg' or 'credit_rating'
-
-class AddEmailRequest(BaseModel):
-    email: EmailStr
-
-logger = logging.getLogger(__name__)
-
-# Add these routes to your existing router
 @router.get("/email-settings", response_model=EmailSettingsResponse)
 async def get_email_settings(db: Session = Depends(get_db)):
     """Get current email notification settings from database"""
     try:
         email_repo = EmailSettingsRepository()
         settings_dict = email_repo.get_email_settings(db)
+        
+        logger.info(f"Retrieved email settings: {settings_dict}")
         
         settings = EmailSettings(
             esg_emails=settings_dict.get('esg_emails', []),
@@ -148,8 +106,10 @@ async def get_email_settings(db: Session = Depends(get_db)):
 
 @router.post("/email-settings", response_model=EmailSettingsResponse)
 async def save_email_settings(settings: EmailSettings, db: Session = Depends(get_db)):
-    """Save email notification settings to database"""
+    """Save email notification settings to database - FIXED VERSION"""
     try:
+        logger.info(f"Saving email settings: {settings}")
+        
         # Validate email addresses
         if not settings.esg_emails and not settings.credit_rating_emails:
             raise HTTPException(
@@ -164,20 +124,24 @@ async def save_email_settings(settings: EmailSettings, db: Session = Depends(get
             'notification_preferences': settings.notification_preferences
         }
         
+        logger.info(f"Converting settings to dict: {settings_dict}")
+        
         success = email_repo.save_email_settings(db, settings_dict)
         
         if success:
+            logger.info("Email settings saved successfully")
             return EmailSettingsResponse(
                 success=True,
                 message="Email settings saved successfully",
                 settings=settings
             )
         else:
+            logger.error("Failed to save email settings to database")
             raise HTTPException(status_code=500, detail="Failed to save email settings to database")
             
     except Exception as e:
         logger.error(f"Error saving email settings: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save email settings")
+        raise HTTPException(status_code=500, detail=f"Failed to save email settings: {str(e)}")
 
 @router.post("/test-email")
 async def send_test_email(request: TestEmailRequest, db: Session = Depends(get_db)):
@@ -231,20 +195,24 @@ async def send_test_email(request: TestEmailRequest, db: Session = Depends(get_d
 
 @router.delete("/email-settings/{category}/{email}")
 async def remove_email_from_settings(category: str, email: str, db: Session = Depends(get_db)):
-    """Remove an email from notification settings"""
+    """Remove an email from notification settings - FIXED VERSION"""
     try:
         if category not in ['esg', 'credit_rating']:
             raise HTTPException(status_code=400, detail="Category must be 'esg' or 'credit_rating'")
+        
+        logger.info(f"Removing email {email} from {category} category")
         
         email_repo = EmailSettingsRepository()
         success = email_repo.remove_email_from_category(db, category, email)
         
         if success:
+            logger.info(f"Successfully removed email {email} from {category}")
             return {
                 "success": True,
                 "message": f"Email {email} removed from {category} notifications"
             }
         else:
+            logger.error(f"Failed to remove email {email} from {category}")
             raise HTTPException(status_code=500, detail="Failed to remove email from database")
             
     except Exception as e:
@@ -253,20 +221,24 @@ async def remove_email_from_settings(category: str, email: str, db: Session = De
 
 @router.post("/email-settings/{category}/add")
 async def add_email_to_settings(category: str, request: AddEmailRequest, db: Session = Depends(get_db)):
-    """Add an email to notification settings"""
+    """Add an email to notification settings - FIXED VERSION"""
     try:
         if category not in ['esg', 'credit_rating']:
             raise HTTPException(status_code=400, detail="Category must be 'esg' or 'credit_rating'")
+        
+        logger.info(f"Adding email {request.email} to {category} category")
         
         email_repo = EmailSettingsRepository()
         success = email_repo.add_email_to_category(db, category, request.email)
         
         if success:
+            logger.info(f"Successfully added email {request.email} to {category}")
             return {
                 "success": True,
                 "message": f"Email {request.email} added to {category} notifications"
             }
         else:
+            logger.error(f"Failed to add email {request.email} to {category}")
             raise HTTPException(status_code=500, detail="Failed to add email to database")
             
     except Exception as e:
@@ -304,3 +276,34 @@ async def get_email_logs(
     except Exception as e:
         logger.error(f"Error retrieving email logs: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve email logs")
+
+@router.get("/logs/crawl")
+async def get_crawl_logs(
+    limit: int = 50,
+    page_id: int = None,
+    db: Session = Depends(get_db)
+):
+    """Get crawl logs"""
+    query = db.query(CrawlLog)
+    
+    if page_id:
+        query = query.filter(CrawlLog.page_id == page_id)
+    
+    logs = query.order_by(CrawlLog.started_at.desc()).limit(limit).all()
+    
+    return [
+        {
+            "id": log.id,
+            "page_id": log.page_id,
+            "page_name": log.page.name if log.page else None,
+            "status": log.status,
+            "tenders_found": log.tenders_found,
+            "tenders_new": log.tenders_new,
+            "started_at": log.started_at.isoformat(),
+            "completed_at": log.completed_at.isoformat() if log.completed_at else None,
+            "duration_seconds": log.duration_seconds,
+            "error_message": log.error_message,
+            "error_type": log.error_type
+        }
+        for log in logs
+    ]
